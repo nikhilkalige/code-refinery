@@ -18,15 +18,15 @@
       {
         devShells.default = pkgs.mkShell {
           packages = let 
-            kattis = mkScript "kattis" ''
+            cp = mkScript "cp" ''
               gitroot=$(git rev-parse --show-toplevel)
-              $gitroot/kattis/kattis.py "$@"
+              $gitroot/solver/cp.py "$@"
             '';
           in
             [
-              kattis
               python
               pythonPackages.requests
+              cp
             ];
 
           shellHook = ''
