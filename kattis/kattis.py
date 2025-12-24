@@ -4,30 +4,20 @@ Kattis helper script for competitive programming.
 
 Commands:
     new <problem_id>     Create a new problem directory with template
-    download <problem_id> Download sample test cases
     test [problem_id]    Run solution against sample test cases
     submit [problem_id]  Submit solution to Kattis
-
-Setup:
-    1. Create ~/.kattisrc with your credentials from https://open.kattis.com/download/kattisrc
-    2. The file should contain:
-       [user]
-       username: your_username
-       token: your_token
-       [kattis]
-       hostname: open.kattis.com
-       loginurl: https://open.kattis.com/login
-       submissionurl: https://open.kattis.com/submit
-       submissionsurl: https://open.kattis.com/submissions
 """
 
 import argparse
 import configparser
+from contextlib import redirect_stdout
+import io
 import re
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
+import importlib.util
+import traceback
 
 try:
     import requests
@@ -53,6 +43,19 @@ def solve():
 if __name__ == "__main__":
     solve()
 '''
+
+
+class Tee:
+    def __init__(self, *files):
+        self.files = files
+
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+
+    def flush(self):
+        for f in self.files:
+            f.flush()
 
 
 def get_config():
@@ -109,6 +112,7 @@ def get_samples_dir(problem_id: str) -> Path:
 def download_samples(problem_id: str) -> Path:
     """Download sample test cases to temp directory. Returns samples dir."""
     samples_dir = get_samples_dir(problem_id)
+    print(samples_dir)
 
     # Check if already downloaded
     if samples_dir.exists() and list(samples_dir.glob("*.in")):
@@ -148,7 +152,7 @@ def download_samples(problem_id: str) -> Path:
     return samples_dir
 
 
-def cmd_test(problem_id: str = None):
+def cmd_test(problem_id: str | None = None, test_id: int | None = None):
     """Run solution against sample test cases."""
     if problem_id is None:
         problem_id = get_current_problem()
@@ -166,9 +170,15 @@ def cmd_test(problem_id: str = None):
         sys.exit(1)
 
     samples = sorted(samples_dir.glob("*.in"))
+    if test_id is not None:
+        test_id = int(test_id)
+        samples = filter(lambda s: s.name.startswith(f"{test_id:02}"), samples)
 
     passed = 0
     failed = 0
+
+    original_stdin = sys.stdin
+    original_stdout = sys.stdout
 
     for input_file in samples:
         output_file = input_file.with_suffix(".ans")
@@ -178,52 +188,63 @@ def cmd_test(problem_id: str = None):
         print(f"Test: {test_name}")
         print("=" * 50)
 
-        # Run solution
-        try:
-            result = subprocess.run(
-                [sys.executable, str(solution_file)],
-                stdin=input_file.open(),
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except subprocess.TimeoutExpired:
-            print("❌ TIMEOUT (>10s)")
-            failed += 1
-            continue
+        output_capture = io.StringIO()
+        sys.stdout = Tee(sys.__stdout__, output_capture)
 
-        actual = result.stdout.rstrip("\n")
+        with open(input_file, "r") as f:
+            sys.stdin = f
 
-        if result.returncode != 0:
-            print("❌ RUNTIME ERROR")
-            print(f"stderr: {result.stderr}")
-            failed += 1
-            continue
+            spec = importlib.util.spec_from_file_location("__main__", solution_file)
+            sol = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(sol)
 
-        if output_file.exists():
-            expected = output_file.read_text().rstrip("\n")
+            actual = output_capture.getvalue().rstrip("\n")
+            sys.stdout = original_stdout
 
-            if actual == expected:
-                print("✅ PASSED")
-                passed += 1
+            if output_file.exists():
+                expected = output_file.read_text().rstrip("\n")
+                if actual == expected:
+                    print("✅ PASSED")
+                    passed += 1
+                else:
+                    print("❌ FAILED")
+                    print("\nInput:")
+                    print(input_file.read_text().rstrip("\n"))
+                    print("\nExpected:")
+                    print(expected)
+                    print("\nActual:")
+                    print(actual)
+                    failed += 1
             else:
-                print("❌ FAILED")
-                print("\nInput:")
-                print(input_file.read_text().rstrip("\n"))
-                print("\nExpected:")
-                print(expected)
-                print("\nActual:")
-                print(actual)
-                failed += 1
-        else:
-            print("⚠️  No expected output file")
-            print(f"Output: {actual}")
+                print("⚠️  No expected output file")
+                print(f"Output: {actual}")
+
+    # Ensure stdin is reset even if an exception occurs
+    sys.stdin = original_stdin
 
     print("\n" + "=" * 50)
     print(f"Results: {passed} passed, {failed} failed")
     print("=" * 50)
 
     return failed == 0
+
+
+def cmd_run(problem_id: str | None, file: Path):
+    if problem_id is None:
+        problem_id = get_current_problem()
+
+    problem_dir = get_problem_dir(problem_id)
+    solution_file = problem_dir / "solution.py"
+
+    if not solution_file.exists():
+        print(f"Error: Solution file not found: {solution_file}")
+        sys.exit(1)
+
+    with open(file, "r") as f:
+        sys.stdin = f
+        spec = importlib.util.spec_from_file_location("__main__", solution_file)
+        sol = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sol)
 
 
 def cmd_submit(problem_id: str = None):
@@ -264,14 +285,22 @@ def cmd_submit(problem_id: str = None):
     submit_data = {
         "problem": problem_id,
         "language": "Python 3",
-        "mainclass": "",
+        "mainclass": "solution.py",
         "script": "true",
+        "submit": "true",
+        "submit_ctr": 2,
+        "tag": "",
     }
 
-    files = {"sub_file[]": ("solution.py", solution_file.read_text(), "text/plain")}
+    with open(solution_file, "rb") as sub_file:
+        files = [
+            (
+                "sub_file[]",
+                (solution_file.name, sub_file.read(), "application/octet-stream"),
+            )
+        ]
 
     response = session.post(submit_url, data=submit_data, files=files)
-
     if response.status_code != 200:
         print(f"Submission failed: {response.status_code}")
         print(response.text)
@@ -301,11 +330,22 @@ def main():
     new_parser = subparsers.add_parser("new", help="Create new problem directory")
     new_parser.add_argument("problem_id", help="Kattis problem ID")
 
+    run_parser = subparsers.add_parser("run", help="Run tests with input file")
+    run_parser.add_argument(
+        "problem_id",
+        nargs="?",
+        help="Problem ID (optional if in problem dir)",
+    )
+    run_parser.add_argument("--file", required=True)
+
     # test
     test_parser = subparsers.add_parser("test", help="Download samples and run tests")
     test_parser.add_argument(
-        "problem_id", nargs="?", help="Problem ID (optional if in problem dir)"
+        "problem_id",
+        nargs="?",
+        help="Problem ID (optional if in problem dir)",
     )
+    test_parser.add_argument("--test-id", nargs="?", default=None)
 
     # submit
     submit_parser = subparsers.add_parser("submit", help="Submit to Kattis")
@@ -318,9 +358,11 @@ def main():
     if args.command == "new":
         cmd_new(args.problem_id)
     elif args.command == "test":
-        cmd_test(args.problem_id)
+        cmd_test(args.problem_id, args.test_id)
     elif args.command == "submit":
         cmd_submit(args.problem_id)
+    elif args.command == "run":
+        cmd_run(args.problem_id, Path(args.file))
 
 
 if __name__ == "__main__":
