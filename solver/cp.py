@@ -11,15 +11,19 @@ Highlights of the refactor:
   - Per-platform logic in kattis/platform.py and euler/platform.py
 
 Usage examples:
-  ./cp.py kattis new hello
-  ./cp.py kattis test hello
-  ./cp.py kattis submit hello
+  # As a script
+  ./solver/cp.py kattis new hello
+  ./solver/cp.py kattis test hello
+  ./solver/cp.py kattis submit hello
 
-  ./cp.py euler new 1
-  ./cp.py euler run 1
-  ./cp.py euler answer 1 --set 233168
-  ./cp.py euler test 1
-  ./cp.py euler submit 1
+  ./solver/cp.py euler new 1
+  ./solver/cp.py euler run 1
+  ./solver/cp.py euler test 1
+  ./solver/cp.py euler submit 1
+
+  # Via flake devShell helper (bin: cph)
+  cph kattis test hello
+  cph euler test 1
 """
 
 import argparse
@@ -31,9 +35,9 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from solver.core import Platform
-from euler.platform import EulerPlatform
-from kattis.platform import KattisPlatform
+from solver.core import Platform  # noqa: E402
+from euler.platform import EulerPlatform  # noqa: E402
+from kattis.platform import KattisPlatform  # noqa: E402
 
 
 def build_parser(platforms: list[Platform]) -> argparse.ArgumentParser:

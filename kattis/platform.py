@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Kattis platform integration."""
+"""
+Kattis platform integration.
+
+Tests (tests.toml)
+- Location: `kattis/<id>/tests.toml`
+- Each case can provide `stdin` and optional `answer` (expected stdout).
+- If `tests.toml` exists, `kattis test` runs these cases. Otherwise, it downloads
+  samples to a temp directory and runs them directly. `cmd_new` will attempt to
+  download samples and convert them into `tests.toml` when possible.
+"""
 
 import configparser
 import re
@@ -7,12 +16,20 @@ import sys
 import tempfile
 from pathlib import Path
 
-from solver.core import Platform, Runner, compare_report, print_banner
+from solver.core import Platform, Runner, compare_report, print_banner, load_tests_toml, run_stdin_cases
 
 try:
     import requests  # type: ignore
 except Exception:
     requests = None
+
+try:  # Python 3.11+
+    import tomllib  # type: ignore
+except Exception:  # pragma: no cover
+    try:
+        import tomli as tomllib  # type: ignore
+    except Exception:  # pragma: no cover
+        tomllib = None  # type: ignore
 
 
 KATTIS_TEMPLATE = '''#!/usr/bin/env python3
@@ -31,6 +48,13 @@ def solve():
 if __name__ == "__main__":
     solve()
 '''
+
+KATTIS_TESTS_TOML_TEMPLATE = (
+    "[[cases]]\n"
+    "# name = \"sample-01\"\n"
+    "# stdin = \"\"\"input...\"\"\"\n"
+    "# answer = \"\"\"output...\"\"\"\n"
+)
 
 
 class KattisPlatform(Platform):
@@ -75,47 +99,59 @@ class KattisPlatform(Platform):
         print(f"Downloaded {len(list(samples_dir.glob('*.in')))} sample(s) to temp dir")
         return samples_dir
 
+    def tests_path(self, problem_id: str) -> Path:
+        return self.problem_dir(problem_id) / "tests.toml"
+
+    def _toml_multiline(self, s: str) -> str:
+        # Escape triple quotes inside the string for TOML basic triple-quoted strings
+        return '"""' + s.replace('"""', '\\"""') + '"""'
+
+    def write_tests_from_samples(self, problem_id: str, samples_dir: Path) -> Path:
+        tests_file = self.tests_path(problem_id)
+        lines: list[str] = []
+        samples = sorted(samples_dir.glob("*.in"))
+        for input_file in samples:
+            name = input_file.stem
+            output_file = input_file.with_suffix(".ans")
+            stdin = input_file.read_text()
+            answer = output_file.read_text() if output_file.exists() else None
+            lines.append("[[cases]]")
+            lines.append(f"name = \"{name}\"")
+            lines.append(f"stdin = {self._toml_multiline(stdin)}")
+            if answer is not None:
+                lines.append(f"answer = {self._toml_multiline(answer)}")
+            lines.append("")
+        content = "\n".join(lines).rstrip() + "\n"
+        tests_file.write_text(content)
+        print(f"Created: {tests_file}")
+        return tests_file
+
     # Commands
     def cmd_new(self, problem_id: str):
-        self.problem_dir(problem_id).mkdir(parents=True, exist_ok=True)
-        sol = self.solution_file(problem_id)
-        if not sol.exists():
-            sol.write_text(KATTIS_TEMPLATE.format(problem_id=problem_id))
-            print(f"Created: {sol}")
-        else:
-            print(f"Solution file already exists: {sol}")
-        self.download_samples(problem_id)
+        self.scaffold_solution(problem_id, KATTIS_TEMPLATE.format(problem_id=problem_id))
+        tests = self.tests_path(problem_id)
+        if not tests.exists():
+            samples = self.download_samples(problem_id)
+            if samples and list(samples.glob("*.in")):
+                self.write_tests_from_samples(problem_id, samples)
+            else:
+                # Fall back to an empty template
+                self.write_if_absent(tests, KATTIS_TESTS_TOML_TEMPLATE)
         print(f"Problem directory ready: {self.problem_dir(problem_id)}")
 
-    def cmd_test(self, problem_id: str, test_id: int | None = None):
+    def cmd_test(self, problem_id: str, test_id: int | None = None, **kwargs) -> bool:
         self.ensure_solution_exists(problem_id)
-        samples_dir = self.download_samples(problem_id)
-        if not samples_dir:
-            sys.exit(1)
-        samples = sorted(samples_dir.glob("*.in"))
-        if test_id is not None:
-            test_id = int(test_id)
-            samples = [s for s in samples if s.name.startswith(f"{test_id:02}")]
-        passed = failed = 0
-        for input_file in samples:
-            output_file = input_file.with_suffix(".ans")
-            print_banner(f"Test: {input_file.stem}")
-            actual = Runner.run(self.solution_file(problem_id), input_file)
-            if output_file.exists():
-                expected = output_file.read_text().rstrip("\n")
-                if compare_report(expected, actual):
-                    passed += 1
-                else:
-                    print("\nInput:")
-                    print(input_file.read_text().rstrip("\n"))
-                    failed += 1
-            else:
-                print("⚠️  No expected output file")
-                print(f"Output: {actual}")
-        print("\n" + "=" * 50)
-        print(f"Results: {passed} passed, {failed} failed")
-        print("=" * 50)
-        return failed == 0
+        tests_file = self.tests_path(problem_id)
+        if not tests_file.exists():
+            # If tests.toml is missing, try to download samples and generate it once
+            samples_dir = self.download_samples(problem_id)
+            if not samples_dir or not list(samples_dir.glob("*.in")):
+                print("Error: no tests.toml and no downloadable samples; cannot run tests.")
+                sys.exit(1)
+            self.write_tests_from_samples(problem_id, samples_dir)
+        data = load_tests_toml(tests_file)
+        cases = data.get("cases", [])
+        return run_stdin_cases(self.solution_file(problem_id), cases, test_id=test_id)
 
     def cmd_submit(self, problem_id: str):
         self.ensure_solution_exists(problem_id)
@@ -181,4 +217,3 @@ class KattisPlatform(Platform):
         submit = sp.add_parser("submit", help="Submit to Kattis")
         submit.add_argument("problem_id", nargs="?")
         submit.set_defaults(func=lambda a, plat=self: plat.cmd_submit(plat.resolve_problem_id(a.problem_id)))
-

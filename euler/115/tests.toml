@@ -1,0 +1,14 @@
+[[cases]]
+name = "s1"
+stdin = "3"
+answer = "30"
+
+[[cases]]
+name = "s2"
+stdin = "10"
+answer = "57"
+
+[[cases]]
+name = "task"
+stdin = "50"
+answer = "168"

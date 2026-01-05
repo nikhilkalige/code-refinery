@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Project Euler platform integration."""
+"""
+Project Euler platform integration.
+
+Tests (tests.toml)
+- Location: `euler/<id>/tests.toml`
+- Each case provides `stdin` and optional `answer` (expected stdout), matching Kattis.
+- When `answer` is omitted, the case runs and is reported as unchecked.
+"""
 
 from pathlib import Path
 import sys
 
-from solver.core import Platform, Runner, compare_report
+from solver.core import Platform, Runner, load_tests_toml, run_stdin_cases
 
 
 EULER_TEMPLATE = '''#!/usr/bin/env python3
@@ -23,42 +30,39 @@ if __name__ == "__main__":
     print(ans)
 '''
 
+TESTS_TOML_TEMPLATE = (
+    "# tests.toml\n"
+    "# Each case provides stdin and optional expected answer.\n\n"
+    "[[cases]]\n"
+    "# name = \"example\"\n"
+    "# stdin = \"\"\"input...\"\"\"\n"
+    "# answer = \"\"\"output...\"\"\"\n"
+)
+
 
 class EulerPlatform(Platform):
     name = "euler"
 
-    def answer_path(self, problem_id: str) -> Path:
-        return self.problem_dir(problem_id) / "answer.txt"
+    def tests_path(self, problem_id: str) -> Path:
+        return self.problem_dir(problem_id) / "tests.toml"
 
     # Commands
     def cmd_new(self, problem_id: str):
-        self.problem_dir(problem_id).mkdir(parents=True, exist_ok=True)
-        sol = self.solution_file(problem_id)
-        if not sol.exists():
-            sol.write_text(EULER_TEMPLATE.format(problem_id=problem_id))
-            print(f"Created: {sol}")
-        else:
-            print(f"Solution file already exists: {sol}")
-        ans = self.answer_path(problem_id)
-        if not ans.exists():
-            ans.write_text("# Put expected answer (single line) here when known.\n")
-            print(f"Created: {ans}")
+        self.scaffold_solution(problem_id, EULER_TEMPLATE.format(problem_id=problem_id))
+        tests = self.tests_path(problem_id)
+        self.write_if_absent(tests, TESTS_TOML_TEMPLATE)
         print(f"Problem directory ready: {self.problem_dir(problem_id)}")
 
-    def cmd_test(self, problem_id: str, **kwargs):
+    def cmd_test(self, problem_id: str, **kwargs) -> bool:
         self.ensure_solution_exists(problem_id)
-        ans = self.answer_path(problem_id)
-        actual = Runner.run(self.solution_file(problem_id))
-        if not ans.exists():
-            print("⚠️  No expected answer saved (answer.txt).")
-            print(f"Output: {actual}")
+        tests_file = self.tests_path(problem_id)
+        if not tests_file.exists():
+            print("Error: tests.toml not found. Create it to define test cases.")
+            print(f"Expected at: {tests_file}")
             sys.exit(1)
-        expected = ans.read_text().strip()
-        if expected.startswith("#") or expected == "":
-            print("⚠️  Expected answer file has no value yet.")
-            print(f"Output: {actual}")
-            sys.exit(1)
-        compare_report(expected.strip(), actual.strip())
+        data = load_tests_toml(tests_file)
+        cases = data.get("cases", [])
+        return run_stdin_cases(self.solution_file(problem_id), cases)
 
     def cmd_submit(self, problem_id: str):
         self.ensure_solution_exists(problem_id)
@@ -75,18 +79,6 @@ class EulerPlatform(Platform):
         except Exception:
             pass
 
-    # Extra command specific to Euler
-    def cmd_answer(self, problem_id: str, set_value: str | None, show: bool):
-        ans = self.answer_path(problem_id)
-        if set_value is not None:
-            ans.write_text(str(set_value).strip() + "\n")
-            print(f"Saved expected answer to {ans}")
-        if show or set_value is None:
-            if ans.exists():
-                print(ans.read_text().strip())
-            else:
-                print("<no answer saved>")
-
     def register_cli(self, subparsers):
         p = subparsers.add_parser(self.name, help="Project Euler commands")
         sp = p.add_subparsers(dest="command", required=True)
@@ -99,17 +91,10 @@ class EulerPlatform(Platform):
         run.add_argument("problem_id", nargs="?")
         run.set_defaults(func=lambda a, plat=self: plat.cmd_run(plat.resolve_problem_id(a.problem_id)))
 
-        test = sp.add_parser("test", help="Run and compare with answer.txt")
+        test = sp.add_parser("test", help="Run cases from tests.toml")
         test.add_argument("problem_id", nargs="?")
         test.set_defaults(func=lambda a, plat=self: plat.cmd_test(plat.resolve_problem_id(a.problem_id)))
-
-        ans = sp.add_parser("answer", help="Get/Set expected answer")
-        ans.add_argument("problem_id", nargs="?")
-        ans.add_argument("--set", dest="set_value", help="Set expected answer")
-        ans.add_argument("--show", action="store_true", help="Show saved answer")
-        ans.set_defaults(func=lambda a, plat=self: plat.cmd_answer(plat.resolve_problem_id(a.problem_id), a.set_value, a.show))
 
         submit = sp.add_parser("submit", help="Print answer and problem URL")
         submit.add_argument("problem_id", nargs="?")
         submit.set_defaults(func=lambda a, plat=self: plat.cmd_submit(plat.resolve_problem_id(a.problem_id)))
-

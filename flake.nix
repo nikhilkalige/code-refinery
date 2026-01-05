@@ -18,15 +18,15 @@
       {
         devShells.default = pkgs.mkShell {
           packages = let 
-            cp = mkScript "cp" ''
+            cph = mkScript "cph" ''
               gitroot=$(git rev-parse --show-toplevel)
-              $gitroot/solver/cp.py "$@"
+              "$gitroot/solver/cp.py" "$@"
             '';
           in
             [
               python
               pythonPackages.requests
-              cp
+              cph
             ];
 
           shellHook = ''

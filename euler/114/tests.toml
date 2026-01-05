@@ -1,0 +1,10 @@
+[[cases]]
+name = "final"
+stdin = "50 3"
+answer = "16475640049"
+
+[[cases]]
+name = "sample"
+stdin = "7 3"
+answer = "17"
+

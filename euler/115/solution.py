@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Project Euler Problem 114
-URL: https://projecteuler.net/problem=114
+Project Euler Problem 115
+URL: https://projecteuler.net/problem=115
 """
 
 import sys
 
 
-def solve(N: int, min_len: int) -> int:
+def ways(N: int, min_len: int) -> int:
     """
     Calculates the number of ways to fill a row of length N with blocks
     of minimum length 'min_len', separated by at least one gap.
@@ -49,6 +49,13 @@ def solve(N: int, min_len: int) -> int:
     return dp[N]
 
 
+def solve(block_size: int):
+    for N in range(block_size, 1_000):
+        count = ways(N, block_size)
+        if count > 1_000_000:
+            return N
+
+
 if __name__ == "__main__":
-    [a, b] = [int(n) for n in sys.stdin.readline().split(" ")]
-    print(solve(a, b))
+    block_size = int(sys.stdin.readline())
+    print(solve(block_size))
