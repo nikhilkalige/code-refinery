@@ -1,10 +1,15 @@
 [[cases]]
-name = "final"
-stdin = "50 3"
-answer = "16475640049"
+name = "s1"
+stdin = "3"
+answer = "30"
 
 [[cases]]
-name = "sample"
-stdin = "7 3"
-answer = "17"
+name = "s2"
+stdin = "10"
+answer = "57"
+
+[[cases]]
+name = "task"
+stdin = "50"
+answer = "168"
 
