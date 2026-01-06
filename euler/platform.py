@@ -20,6 +20,9 @@ Project Euler Problem {problem_id}
 URL: https://projecteuler.net/problem={problem_id}
 """
 
+import sys
+
+
 def solve() -> int | str:
     # TODO: implement
     return 0
@@ -31,12 +34,10 @@ if __name__ == "__main__":
 '''
 
 TESTS_TOML_TEMPLATE = (
-    "# tests.toml\n"
-    "# Each case provides stdin and optional expected answer.\n\n"
     "[[cases]]\n"
     "# name = \"example\"\n"
-    "# stdin = \"\"\"input...\"\"\"\n"
-    "# answer = \"\"\"output...\"\"\"\n"
+    "# stdin = \"input...\"\n"
+    "# answer = \"output...\"\n"
 )
 
 

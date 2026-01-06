@@ -57,10 +57,12 @@ def main():
     parser = build_parser(platforms)
     # Autodetect platform by current directory if not provided
     names = {p.name for p in platforms}
-    if len(sys.argv) > 1 and sys.argv[1] not in names:
-        parent = Path.cwd().parent.name
-        if parent in names:
-            sys.argv.insert(1, parent)
+    if len(sys.argv) > 1 and sys.argv[1] not in names and not sys.argv[1].startswith("-"):
+        cwd = Path.cwd()
+        if cwd.name in names:
+            sys.argv.insert(1, cwd.name)
+        elif cwd.parent.name in names:
+            sys.argv.insert(1, cwd.parent.name)
     args = parser.parse_args()
     if hasattr(args, "func"):
         args.func(args)
