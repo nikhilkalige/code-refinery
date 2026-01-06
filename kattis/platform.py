@@ -39,14 +39,13 @@ URL: https://open.kattis.com/problems/{problem_id}
 """
 
 import sys
-from sys import stdin
 
 def solve():
     pass
 
 
 if __name__ == "__main__":
-    solve()
+    print(solve(sys.stdin.readline()))
 '''
 
 KATTIS_TESTS_TOML_TEMPLATE = (

@@ -1,0 +1,27 @@
+[[cases]]
+name = "scenes-0000"
+stdin = """25 5 5
+"""
+answer = """7770
+"""
+
+[[cases]]
+name = "scenes-0001"
+stdin = """15 5 5
+"""
+answer = """6050
+"""
+
+[[cases]]
+name = "scenes-0002"
+stdin = """10 10 1
+"""
+answer = """1022
+"""
+
+[[cases]]
+name = "scenes-0003"
+stdin = """4 2 2
+"""
+answer = """6
+"""
