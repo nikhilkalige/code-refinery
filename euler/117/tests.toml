@@ -1,0 +1,12 @@
+# tests.toml
+# Each case provides stdin and optional expected answer.
+
+[[cases]]
+name = "s1"
+stdin = 5
+answer = 15
+
+[[cases]]
+name = "task"
+stdin = 50
+answer = 100808458960497
