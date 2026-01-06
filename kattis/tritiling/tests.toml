@@ -1,0 +1,11 @@
+[[cases]]
+name = "sample"
+stdin = """2
+8
+12
+-1
+"""
+answer = """3
+153
+2131
+"""
